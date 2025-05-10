@@ -1,0 +1,1 @@
+DELETE FROM tweets WHERE username like 'example_user_%';

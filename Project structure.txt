@@ -1,0 +1,42 @@
+# Setup
+- Create a user list
+- Set a date to stop getting tweets at 
+
+# Get tweets
+- For user in the list, call get_tweets(user, stop_date)
+- get_tweets:
+    - stop_date defaults to today-1 day
+    - call the "twitter/user/last_tweets" endpoint
+    - Now parse the 3 kinds of tweets
+    1. Regular tweets
+        - Just add to DB
+    2. retweets
+        - First add the base tweet and mark who retweeted it
+    3. replies
+        - First add the base tweet, then add the reply to DB
+    - Save tweets to local sqllite DB if they don't already exist (check by username and created_at)
+
+# For any links in tweet, get that info and store text in a table
+- WIP
+
+# Parse tweets and rank how important they are
+- (todo) Make sure DB has a table setup for capturing the results
+- (todo) Add run mode to skip calling twitter api and assume we already have tweets
+- Pull all tweets from DB (or use the list of tweets we already have)
+- For each tweet, send to LLM-as-a-judge to rank
+    - For testing/cheapness enable local LLM
+    - For max power, send to OpenRouter or other multi-LLM provider
+    - Save importance of each tweet to a new table
+
+# Write article
+- Pull the top 10-15 tweets in order of importance
+- Send to LLM and have it write a news article
+- Save article to DB
+
+# Create podcast
+- Take article output and send to LLM to create a podcast
+    - Notebook LM?
+    - Local model?
+
+
+
