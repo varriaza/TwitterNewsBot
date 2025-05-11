@@ -75,6 +75,17 @@ class NewsDatabase:
         ON ranks (tweet_id)
         ''')
         
+        # Create articles table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS articles (
+            article_id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL
+        )
+        ''')
+        
         conn.commit()
         self.close()
     
@@ -263,3 +274,62 @@ class NewsDatabase:
             
         self.close()
         return results 
+    
+    def article_exists(self, article_id: str) -> bool:
+        """Check if an article already exists in the database based on article_id"""
+        conn = self.connect()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT 1 FROM articles WHERE article_id = ?", (article_id,))
+        
+        exists = cursor.fetchone() is not None
+        self.close()
+        return exists
+    
+    def save_article(self, article_id: str, title: str, content: str, 
+                    summary: str, created_at: datetime = None) -> str:
+        """
+        Save an article to the database
+        Returns the article_id of the saved article
+        """
+        # If no creation time provided, use current time
+        if created_at is None:
+            created_at = datetime.now()
+            
+        # Check if article already exists
+        if self.article_exists(article_id):
+            return article_id
+            
+        conn = self.connect()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        INSERT INTO articles (
+            article_id, title, content, summary, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ''', (
+            article_id, title, content, summary, created_at
+        ))
+        
+        conn.commit()
+        self.close()
+        return article_id
+    
+    def save_article_object(self, article):
+        """
+        Save an Article object to the database
+        Returns the article_id of the saved article
+        """
+        # Generate a new UUID for the article if it doesn't have one
+        if not hasattr(article, 'article_id') or not article.article_id:
+            article_id = str(uuid.uuid4())
+        else:
+            article_id = article.article_id
+            
+        return self.save_article(
+            article_id=article_id,
+            title=article.title,
+            content=article.content,
+            summary=article.summary,
+            created_at=article.created_at
+        ) 

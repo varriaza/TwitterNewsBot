@@ -56,7 +56,7 @@ def format_tweet_info(tweet: Tweet) -> str:
     return tweet_info
 
 
-def evaluate_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
+def rank_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
     # Get formatted tweet information
     tweet_info = format_tweet_info(tweet)
 
@@ -64,7 +64,7 @@ def evaluate_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
     date_info = get_date_info()
 
     # Pull in the jinja prompt
-    template_path = pathlib.Path(__file__).parent / "rank_prompt_v2.jinja"
+    template_path = pathlib.Path(__file__).parent / "rank_prompt_v3.jinja"
     with open(template_path, "r") as f:
         template_content = f.read()
     
