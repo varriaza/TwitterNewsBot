@@ -1,7 +1,9 @@
 import sqlite3
 import uuid
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TypeVar, Generic, Type
+
+T = TypeVar('T')
 
 class NewsDatabase:
     def __init__(self, db_path: str = "news_data.db"):
@@ -51,6 +53,26 @@ class NewsDatabase:
         cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_username_created 
         ON tweets (username, created_at)
+        ''')
+        
+        # Create ranks table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ranks (
+            rank_id TEXT PRIMARY KEY,
+            tweet_id TEXT NOT NULL,
+            run_time TIMESTAMP NOT NULL,
+            reason TEXT NOT NULL,
+            score INTEGER NOT NULL,
+            model TEXT,
+            prompt TEXT,
+            FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id)
+        )
+        ''')
+        
+        # Create an index on tweet_id for faster lookups
+        cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_ranks_tweet_id
+        ON ranks (tweet_id)
         ''')
         
         conn.commit()
@@ -143,6 +165,58 @@ class NewsDatabase:
             bookmark_count=tweet.bookmark_count
         )
     
+    def rank_exists(self, rank_id: str) -> bool:
+        """Check if a rank already exists in the database based on rank_id"""
+        conn = self.connect()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT 1 FROM ranks WHERE rank_id = ?", (rank_id,))
+        
+        exists = cursor.fetchone() is not None
+        self.close()
+        return exists
+    
+    def save_rank(self, rank_id: str, tweet_id: str, run_time: datetime, 
+                  reason: str, score: int, model: Optional[str] = None, 
+                  prompt: Optional[str] = None) -> str:
+        """
+        Save a rank to the database
+        Returns the rank_id of the saved rank
+        """
+        # Check if rank already exists
+        if self.rank_exists(rank_id):
+            return rank_id
+            
+        conn = self.connect()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        INSERT INTO ranks (
+            rank_id, tweet_id, run_time, reason, score, model, prompt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            rank_id, tweet_id, run_time, reason, score, model, prompt
+        ))
+        
+        conn.commit()
+        self.close()
+        return rank_id
+    
+    def save_rank_object(self, rank):
+        """
+        Save a Rank object to the database
+        Returns the rank_id of the saved rank
+        """
+        return self.save_rank(
+            rank_id=rank.rank_id,
+            tweet_id=rank.tweet_id,
+            run_time=rank.run_time,
+            reason=rank.reason,
+            score=rank.score,
+            model=rank.model,
+            prompt=rank.prompt
+        )
+    
     def get_tweets_by_username(self, username: str, limit: int = 100) -> List[Dict[str, Any]]:
         """Get tweets by username, ordered by creation date descending"""
         conn = self.connect()
@@ -154,5 +228,38 @@ class NewsDatabase:
         )
         
         results = [dict(row) for row in cursor.fetchall()]
+        self.close()
+        return results 
+    
+    def execute_query(self, query: str, params: tuple = (), return_type: Type[T] = None) -> List[T]:
+        """
+        Execute a SQL query and map results to objects of the specified type
+        
+        Args:
+            query: SQL query string
+            params: Parameters for the query
+            return_type: Class type to map results to
+            
+        Returns:
+            List of objects of the specified type
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        results = []
+        if return_type:
+            for row in rows:
+                # Convert row to dict
+                row_dict = dict(row)
+                # Create an instance of the return type with the row data
+                obj = return_type(**row_dict)
+                results.append(obj)
+        else:
+            # If no return type specified, return dictionaries
+            results = [dict(row) for row in rows]
+            
         self.close()
         return results 

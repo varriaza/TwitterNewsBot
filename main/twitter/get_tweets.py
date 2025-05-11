@@ -190,6 +190,7 @@ def _convert_api_tweet_to_tweet_object(tweet_data: dict) -> List[Tweet]:
         )
         result_tweets.append(original_tweet)
         
+        # NOTE: The text of the retweet gets cut off!!!
         # Now create the retweet itself
         retweet_id = str(uuid.uuid4())
         retweet = Tweet(
