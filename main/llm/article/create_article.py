@@ -10,6 +10,8 @@ import jinja2
 import pathlib
 from pydantic import BaseModel, Field
 from datetime import datetime
+import uuid
+from typing import Optional, Dict, Any
 
 # Read the env var OLLAMA_HOST
 ollama_host = os.getenv("OLLAMA_HOST")
@@ -22,20 +24,63 @@ class ArticlePlan(BaseModel):
     structure: list[str] = Field(description="Outline of the article structure with section headings")
 
 class LLMArticle(BaseModel):
-    article_id: str = Field(default="", description="The unique identifier for the article")
+    """
+    Model for the LLM to fill out with article information.
+    Contains only the fields that should be populated by the LLM.
+    """
+    title: str = Field(description="The title of the news article")
+    content: str = Field(description="The full content of the news article")
+    summary: str = Field(description="A short summary of the article")
+
+class Article(BaseModel):
+    article_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = Field(description="The title of the news article")
     content: str = Field(description="The full content of the news article")
     summary: str = Field(description="A short summary of the article")
     created_at: datetime = Field(default_factory=datetime.now, description="When the article was generated")
+    model: Optional[str] = None
+    prompt: Optional[str] = None
 
-def collect_tweets_for_article(rank_list: list[Rank] | None = None) -> pd.DataFrame:
+    @classmethod
+    def from_db_row(cls, row: Dict[str, Any]) -> 'Article':
+        """Create an Article object from a database row dictionary"""
+        return cls(
+            article_id=row.get('article_id', str(uuid.uuid4())),
+            title=row['title'],
+            content=row['content'],
+            summary=row['summary'],
+            created_at=row['created_at'],
+            model=row.get('model'),
+            prompt=row.get('prompt')
+        )
+    
+    @classmethod
+    def from_llm_article(cls, llm_article: LLMArticle, model: str = None, prompt: str = None) -> 'Article':
+        """Create a full Article object from an LLMArticle object and additional metadata"""
+        return cls(
+            title=llm_article.title,
+            content=llm_article.content,
+            summary=llm_article.summary,
+            model=model,
+            prompt=prompt
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the Article object to a dictionary"""
+        return self.model_dump()
+    
+    def __str__(self) -> str:
+        """String representation of the Article"""
+        return f"Article(id={self.article_id}\ntitle={self.title}\ncreated_at={self.created_at}\nmodel={self.model})"
+
+def collect_tweets_for_article(rank_list: list[Rank] | None = None, days_ago: int = 2) -> pd.DataFrame:
     # Initialize the database
     db = NewsDatabase("main/db/news_data.db")
+
+    print(f"Collecting tweets for article from the last {days_ago} day(s)")
     
     if rank_list is None or len(rank_list) == 0:
         # Pull in all ranks from the last x days with score >= 7
-        days_ago = 2
-        
         sql_query = f"""
         SELECT * FROM ranks
         WHERE run_time > datetime('now', '-{days_ago} days')
@@ -135,7 +180,37 @@ def generate_article_plan(tweets_df: pd.DataFrame) -> ArticlePlan:
     # print("--------------------------------")
     return plan
 
-def create_article(tweets_df: pd.DataFrame) -> LLMArticle:
+def save_article_to_markdown(article: Article) -> str:
+    """Save the article to a markdown file and return the file path."""
+    # Create the directory if it doesn't exist
+    output_dir = pathlib.Path(__file__).parent / "generated_articles"
+    output_dir.mkdir(exist_ok=True)
+    
+    # Generate a unique filename using timestamp and UUID
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"article_{timestamp}.md"
+    filepath = output_dir / filename
+    
+    # Create the markdown content
+    markdown_content = f"""# {article.title}
+
+*Generated on: {article.created_at.strftime('%Y-%m-%d %H:%M:%S')}*
+
+## Summary
+{article.summary}
+
+## Article
+{article.content}
+"""
+    
+    # Write the content to file
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(markdown_content)
+    
+    print(f"Article saved to: {filepath}")
+    return str(filepath)
+
+def create_article(tweets_df: pd.DataFrame) -> Article:
     """Create an article using a two-step process: planning and generation."""
     # Step 1: Generate an article plan
     plan = generate_article_plan(tweets_df)
@@ -172,9 +247,15 @@ def create_article(tweets_df: pd.DataFrame) -> LLMArticle:
     )
     
     # Run the agent and get the result
-    article = agent.run_sync(prompt).output
+    llm_article = agent.run_sync(prompt).output
     
-    print(f"Generated article with title: {article.title}")
-    # print(f"Article content: {article.content}")
-    print(f"Article summary: {article.summary}")
+    print(f"Generated article with title: {llm_article.title}")
+    print(f"Article summary: {llm_article.summary}")
+    
+    # Create a full Article object from the LLMArticle and additional metadata
+    article = Article.from_llm_article(llm_article, model=model_name, prompt=prompt)
+    
+    # Save the article to a markdown file
+    save_article_to_markdown(article)
+    
     return article

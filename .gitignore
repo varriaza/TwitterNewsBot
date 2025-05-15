@@ -180,3 +180,6 @@ keys/*
 *.db
 
 .vscode/*
+
+# Ignore generated article files
+main/llm/article/generated_articles/*.md

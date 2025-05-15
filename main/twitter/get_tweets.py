@@ -77,6 +77,9 @@ def get_tweets(username: str, stop_date: str) -> List[Tweet]:
                     try:
                         # Use the new parse_tweet_date function
                         tweet_date = parse_tweet_date(created_at_str)
+                        if tweet_date is None:
+                            print(f"Warning: Could not parse date: {created_at_str}")
+                            continue
                     except ValueError:
                         print(f"Warning: Could not parse date: {created_at_str}")
                         continue

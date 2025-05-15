@@ -82,7 +82,9 @@ class NewsDatabase:
             title TEXT NOT NULL,
             content TEXT NOT NULL,
             summary TEXT NOT NULL,
-            created_at TIMESTAMP NOT NULL
+            created_at TIMESTAMP NOT NULL,
+            model TEXT,
+            prompt TEXT
         )
         ''')
         
@@ -115,7 +117,8 @@ class NewsDatabase:
                   like_count: int = 0,
                   quote_count: int = 0,
                   view_count: int = 0,
-                  bookmark_count: int = 0) -> str:
+                  bookmark_count: int = 0,
+                  tweet_id: Optional[str] = None) -> str:
         """
         Save a tweet to the database
         Returns the tweet_id (UUID) of the saved tweet
@@ -134,8 +137,8 @@ class NewsDatabase:
             if result:
                 return result[0]
             
-        # Generate a new UUID for the tweet
-        tweet_id = str(uuid.uuid4())
+        # Use provided tweet_id or generate a new UUID
+        tweet_id = tweet_id or str(uuid.uuid4())
         
         conn = self.connect()
         cursor = conn.cursor()
@@ -173,7 +176,8 @@ class NewsDatabase:
             like_count=tweet.like_count,
             quote_count=tweet.quote_count,
             view_count=tweet.view_count,
-            bookmark_count=tweet.bookmark_count
+            bookmark_count=tweet.bookmark_count,
+            tweet_id=tweet.tweet_id  # Pass through the tweet's ID
         )
     
     def rank_exists(self, rank_id: str) -> bool:
@@ -242,6 +246,22 @@ class NewsDatabase:
         self.close()
         return results 
     
+    def _format_sql_with_params(self, query: str, params: tuple) -> str:
+        """Helper method to format SQL query with parameters for debugging"""
+        if not params:
+            return query
+            
+        # Replace ? with the actual parameter values
+        formatted_query = query
+        for param in params:
+            # Handle different parameter types
+            if isinstance(param, str):
+                param = f"'{param}'"
+            elif param is None:
+                param = 'NULL'
+            formatted_query = formatted_query.replace('?', str(param), 1)
+        return formatted_query
+
     def execute_query(self, query: str, params: tuple = (), return_type: Type[T] = None) -> List[T]:
         """
         Execute a SQL query and map results to objects of the specified type
@@ -257,7 +277,11 @@ class NewsDatabase:
         conn = self.connect()
         cursor = conn.cursor()
         
+        # Print the formatted SQL query with parameters
+        # print(f"Executing SQL:\n{self._format_sql_with_params(query, params)}")
+        
         cursor.execute(query, params)
+        
         rows = cursor.fetchall()
         
         results = []
@@ -287,7 +311,8 @@ class NewsDatabase:
         return exists
     
     def save_article(self, article_id: str, title: str, content: str, 
-                    summary: str, created_at: datetime = None) -> str:
+                    summary: str, created_at: datetime = None,
+                    model: Optional[str] = None, prompt: Optional[str] = None) -> str:
         """
         Save an article to the database
         Returns the article_id of the saved article
@@ -305,10 +330,10 @@ class NewsDatabase:
         
         cursor.execute('''
         INSERT INTO articles (
-            article_id, title, content, summary, created_at
-        ) VALUES (?, ?, ?, ?, ?)
+            article_id, title, content, summary, created_at, model, prompt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
-            article_id, title, content, summary, created_at
+            article_id, title, content, summary, created_at, model, prompt
         ))
         
         conn.commit()
@@ -331,5 +356,7 @@ class NewsDatabase:
             title=article.title,
             content=article.content,
             summary=article.summary,
-            created_at=article.created_at
+            created_at=article.created_at,
+            model=article.model,
+            prompt=article.prompt
         ) 
