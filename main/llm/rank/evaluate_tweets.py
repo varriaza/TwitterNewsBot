@@ -80,7 +80,9 @@ def rank_tweet(tweet: Tweet, openrouter_model_type: Optional[ModelType] = None) 
     if openrouter_model_type:
         # Use OpenRouter with specified model type
         openrouter_model = create_openrouter_model(openrouter_model_type)
-        agent = Agent(model=openrouter_model, output_type=LLMRank, system_prompt=prompt, retries=3)
+        agent = Agent(
+            model=openrouter_model, output_type=LLMRank, system_prompt=prompt, retries=3
+        )
         current_model = get_model_display_name(openrouter_model_type)
     else:
         # Initialize the local Ollama model
@@ -88,7 +90,9 @@ def rank_tweet(tweet: Tweet, openrouter_model_type: Optional[ModelType] = None) 
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
         )
-        agent = Agent(model=ollama_model, output_type=LLMRank, system_prompt=prompt, retries=3)
+        agent = Agent(
+            model=ollama_model, output_type=LLMRank, system_prompt=prompt, retries=3
+        )
         current_model = model_name
 
     # Get the LLM output as LLMRank

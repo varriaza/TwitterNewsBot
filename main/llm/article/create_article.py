@@ -34,7 +34,7 @@ def collect_tweets_for_article(
 
     if rank_list is None or len(rank_list) == 0:
         # Pull in all ranks from the specific date with score >= 7
-        # Join on the tweets table to pull based on when the tweets were created 
+        # Join on the tweets table to pull based on when the tweets were created
         # (and not when the rank was run)
         sql_query = f"""
         SELECT * FROM rank
@@ -108,7 +108,9 @@ def format_tweet_sources(tweets_df: pd.DataFrame) -> str:
     return "\n\n".join(tweet_sources)
 
 
-def generate_article_plan(tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None) -> ArticlePlan:
+def generate_article_plan(
+    tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None
+) -> ArticlePlan:
     """Generate a structured plan for the article using the tweet data."""
     # Format tweet information
     sources = format_tweet_sources(tweets_df)
@@ -127,14 +129,21 @@ def generate_article_plan(tweets_df: pd.DataFrame, openrouter_model_type: Option
     if openrouter_model_type:
         # Use OpenRouter with specified model type
         openrouter_model = create_openrouter_model(openrouter_model_type)
-        agent = Agent(model=openrouter_model, output_type=ArticlePlan, system_prompt=prompt, retries=3)
+        agent = Agent(
+            model=openrouter_model,
+            output_type=ArticlePlan,
+            system_prompt=prompt,
+            retries=3,
+        )
     else:
         # Initialize the local Ollama model
         ollama_model = OpenAIChatModel(
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
         )
-        agent = Agent(model=ollama_model, output_type=ArticlePlan, system_prompt=prompt, retries=3)
+        agent = Agent(
+            model=ollama_model, output_type=ArticlePlan, system_prompt=prompt, retries=3
+        )
 
     # Run the agent and get the plan
     plan = agent.run_sync(prompt).output
@@ -182,7 +191,9 @@ def save_article_to_markdown(article: Article) -> str:
     return str(filepath)
 
 
-def create_article(tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None) -> Article:
+def create_article(
+    tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None
+) -> Article:
     """Create an article using a two-step process: planning and generation."""
     # Step 1: Generate an article plan
     plan = generate_article_plan(tweets_df, openrouter_model_type)
@@ -209,7 +220,12 @@ def create_article(tweets_df: pd.DataFrame, openrouter_model_type: Optional[Mode
     if openrouter_model_type:
         # Use OpenRouter with specified model type
         openrouter_model = create_openrouter_model(openrouter_model_type)
-        agent = Agent(model=openrouter_model, output_type=LLMArticle, system_prompt=prompt, retries=3)
+        agent = Agent(
+            model=openrouter_model,
+            output_type=LLMArticle,
+            system_prompt=prompt,
+            retries=3,
+        )
         current_model = get_model_display_name(openrouter_model_type)
     # Use the local Ollama model if no model type is provided
     else:
@@ -218,7 +234,9 @@ def create_article(tweets_df: pd.DataFrame, openrouter_model_type: Optional[Mode
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
         )
-        agent = Agent(model=ollama_model, output_type=LLMArticle, system_prompt=prompt, retries=3)
+        agent = Agent(
+            model=ollama_model, output_type=LLMArticle, system_prompt=prompt, retries=3
+        )
         current_model = model_name
 
     # Run the agent and get the result

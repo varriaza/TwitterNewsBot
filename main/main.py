@@ -77,7 +77,8 @@ def get_tweets_function() -> list[Tweet]:
 
 
 def rank_tweets_function(
-    tweet_list: list[Tweet] | None = None, openrouter_model_type: Optional[ModelType] = None
+    tweet_list: list[Tweet] | None = None,
+    openrouter_model_type: Optional[ModelType] = None,
 ):
     start_time = time.time()
     print("\nStarting tweet ranking...")
@@ -134,7 +135,10 @@ def rank_tweets_function(
     return rank_list
 
 
-def write_article_function(rank_list: list[Rank] | None = None, openrouter_model_type: Optional[ModelType] = None) -> Article:
+def write_article_function(
+    rank_list: list[Rank] | None = None,
+    openrouter_model_type: Optional[ModelType] = None,
+) -> Article:
     start_time = time.time()
     print("\nStarting article generation...")
 
@@ -169,7 +173,9 @@ def run_everything(openrouter_model_type: Optional[ModelType] = None):
     print("\nStarting full pipeline execution...")
 
     tweet_list = get_tweets_function()
-    rank_list = rank_tweets_function(tweet_list, openrouter_model_type=openrouter_model_type)
+    rank_list = rank_tweets_function(
+        tweet_list, openrouter_model_type=openrouter_model_type
+    )
     write_article_function(rank_list, openrouter_model_type=openrouter_model_type)
     create_podcast_function()
 
@@ -187,9 +193,15 @@ def main():
     parser.add_argument("-r", "--rank", action="store_true", help="Rank tweets")
     parser.add_argument("-a", "--article", action="store_true", help="Write article")
     parser.add_argument("-p", "--podcast", action="store_true", help="Create podcast")
-    parser.add_argument("-fr", "--free", action="store_true", help="Use OpenRouter free model")
-    parser.add_argument("-fa", "--fast", action="store_true", help="Use OpenRouter fast model")
-    parser.add_argument("-sm", "--smart", action="store_true", help="Use OpenRouter smart model")
+    parser.add_argument(
+        "-fr", "--free", action="store_true", help="Use OpenRouter free model"
+    )
+    parser.add_argument(
+        "-fa", "--fast", action="store_true", help="Use OpenRouter fast model"
+    )
+    parser.add_argument(
+        "-sm", "--smart", action="store_true", help="Use OpenRouter smart model"
+    )
     parser.add_argument("-lo", "--local", action="store_true", help="Use local LLM")
 
     args = parser.parse_args()
@@ -212,7 +224,6 @@ def main():
             print("Using local LLM")
         else:
             raise ValueError("No model type provided")
-    
 
     if args.everything:
         run_everything(openrouter_model_type=openrouter_model_type)
