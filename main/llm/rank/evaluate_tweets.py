@@ -3,8 +3,9 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import logfire
-from twitter.tweet import Tweet
-from llm.rank.rank import Rank, LLMRank
+from pydantic_models.tweet_model import Tweet
+from pydantic_models.rank_model import Rank
+from pydantic_models.llm_rank_model import LLMRank
 import jinja2
 import pathlib
 from datetime import datetime, timedelta
@@ -31,7 +32,7 @@ def get_date_info() -> dict[str, str]:
     next_week = today + timedelta(weeks=1)
     next_month = today + timedelta(days=30)  # Approximate
     next_year = today + timedelta(days=365)  # Approximate
-    
+
     # Format dates
     date_format = "%B %d, %Y"  # Example: January 01, 2023
     return {
@@ -39,7 +40,7 @@ def get_date_info() -> dict[str, str]:
         "tomorrow": tomorrow.strftime(date_format),
         "next_week": next_week.strftime(date_format),
         "next_month": next_month.strftime(date_format),
-        "next_year": next_year.strftime(date_format)
+        "next_year": next_year.strftime(date_format),
     }
 
 
@@ -67,7 +68,7 @@ def rank_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
     template_path = pathlib.Path(__file__).parent / "rank_prompt_v3.jinja"
     with open(template_path, "r") as f:
         template_content = f.read()
-    
+
     # Render the template with the tweet text and date information
     jinja_env = jinja2.Environment()
     template = jinja_env.from_string(template_content)
@@ -79,27 +80,18 @@ def rank_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
         )
-        agent = Agent(
-            model=ollama_model,
-            output_type=LLMRank,
-            prompt=prompt,
-            retries=3
-        )
+        agent = Agent(model=ollama_model, output_type=LLMRank, prompt=prompt, retries=3)
     else:
         # TODO: Implement remote LLM
         # Use the OpenAI API
         raise NotImplementedError("Remote LLM not implemented yet")
-    
+
     # Get the LLM output as LLMRank
     llm_rank = agent.run_sync(prompt).output
-    
+
     # Convert LLMRank to a full Rank with additional metadata
     rank = Rank.from_llm_rank(
-        llm_rank=llm_rank,
-        tweet_id=tweet.tweet_id,
-        model=model_name,
-        prompt=prompt
+        llm_rank=llm_rank, tweet_id=tweet.tweet_id, model=model_name, prompt=prompt
     )
-    
-    return rank
 
+    return rank

@@ -1,0 +1,16 @@
+Podcast Name ideas:
+- Finalized
+- The Latest Block
+- Nodeworthy
+- Zero Knowledge News
+- The Daily Hash
+
+Intro:
+G'day and welcome to [NAME], your daily Ethereum briefing. I'm Max, your AI host, here to talk about the latest in everything Ethereum, Layer 2s, and beyond. Whether you're a crypto veteran or just crypto-curious, I'll keep you in the loop, informed, and ready for the next block. Let's dive in!
+
+Intro thoughts:
+- Take out "ready for next block"?
+- Customize based on podcast name
+
+Outro:
+And that's all the news, done and dusted. I've been your host, Max and until then, stay curious and stay informed. Cheers!
