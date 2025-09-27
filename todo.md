@@ -1,13 +1,4 @@
-# Goal: Make DB code nicer
-- Rework to use SQLModel instead of pydantic models for easy DB models
-
-# Goal: double check progress
-- Double check that the move to pydantic models didn't break any imports
-
 # Goal: Refine article creation by integrating LLM Router
-- Add option for using LLM Router instead of local running
-    - Maybe make a local env var to switch between them
-    - If var is not set, default to trying to use LLM Router (aka none dev deploy)
 - Make the model cite the URLs for the tweets it uses 
     - Have the original article LLM return the article in a json format such that each paragraph has the following variables "text", "relevant_tweet_ids"
         - I can then connect the tweet_ids to the tweet links of the tweets and construct the article in a format that I see fit

@@ -9,8 +9,10 @@ from llm.article.create_article import collect_tweets_for_article, create_articl
 from twitter.get_profiles import get_people_usernames, get_organization_usernames
 from datetime import datetime, timedelta
 import time
+from llm.open_router import ModelType
+from typing import Optional
 
-db_path = "main/db/news_data_v2.db"
+db_path = "main/db/news_data.db"
 
 # Set the specific date to run for
 RUN_DAY = "2025-09-26"  # Format: YYYY-MM-DD
@@ -75,7 +77,7 @@ def get_tweets_function() -> list[Tweet]:
 
 
 def rank_tweets_function(
-    tweet_list: list[Tweet] | None = None, use_local_llm: bool = True
+    tweet_list: list[Tweet] | None = None, openrouter_model_type: Optional[ModelType] = None
 ):
     start_time = time.time()
     print("\nStarting tweet ranking...")
@@ -89,7 +91,7 @@ def rank_tweets_function(
         # Exclude retweets as the text is cut off!
         # Run the following sql query:
         sql_query = f"""
-        SELECT * FROM tweets
+        SELECT * FROM tweet
         WHERE date(created_at) = '{RUN_DAY}'
         and tweet_type != 'retweet';
         """
@@ -106,7 +108,7 @@ def rank_tweets_function(
         # tweet_list = tweet_list[:3]
 
         for tweet in tweet_list:
-            rank = rank_tweet(tweet, use_local_llm)
+            rank = rank_tweet(tweet, openrouter_model_type)
             # Save the rank to the database
             # NOTE: this can save duplicate ranks
             db.save_rank_object(rank)
@@ -132,7 +134,7 @@ def rank_tweets_function(
     return rank_list
 
 
-def write_article_function(rank_list: list[Rank] | None = None) -> Article:
+def write_article_function(rank_list: list[Rank] | None = None, openrouter_model_type: Optional[ModelType] = None) -> Article:
     start_time = time.time()
     print("\nStarting article generation...")
 
@@ -140,7 +142,7 @@ def write_article_function(rank_list: list[Rank] | None = None) -> Article:
     tweets_df = collect_tweets_for_article(rank_list, RUN_DAY)
 
     # Generate and get the article
-    article = create_article(tweets_df)
+    article = create_article(tweets_df, openrouter_model_type)
 
     # Save article to database
     db = initialize_database()
@@ -162,13 +164,13 @@ def create_podcast_function():
     print_timing(start_time, "Podcast creation")
 
 
-def run_everything():
+def run_everything(openrouter_model_type: Optional[ModelType] = None):
     total_start_time = time.time()
     print("\nStarting full pipeline execution...")
 
     tweet_list = get_tweets_function()
-    rank_list = rank_tweets_function(tweet_list)
-    write_article_function(rank_list)
+    rank_list = rank_tweets_function(tweet_list, openrouter_model_type=openrouter_model_type)
+    write_article_function(rank_list, openrouter_model_type=openrouter_model_type)
     create_podcast_function()
 
     print_timing(total_start_time, "Full pipeline")
@@ -185,22 +187,46 @@ def main():
     parser.add_argument("-r", "--rank", action="store_true", help="Rank tweets")
     parser.add_argument("-a", "--article", action="store_true", help="Write article")
     parser.add_argument("-p", "--podcast", action="store_true", help="Create podcast")
+    parser.add_argument("-fr", "--free", action="store_true", help="Use OpenRouter free model")
+    parser.add_argument("-fa", "--fast", action="store_true", help="Use OpenRouter fast model")
+    parser.add_argument("-sm", "--smart", action="store_true", help="Use OpenRouter smart model")
+    parser.add_argument("-lo", "--local", action="store_true", help="Use local LLM")
 
     args = parser.parse_args()
 
+    openrouter_model_type = None
+    # If we are running a step that requires an LLM, set the arguments
+    if args.rank or args.article or args.podcast:
+        # Determine which model type to use
+        if args.free:
+            openrouter_model_type = "free"
+            print("Using OpenRouter free model")
+        elif args.fast:
+            openrouter_model_type = "fast"
+            print("Using OpenRouter fast model")
+        elif args.smart:
+            print("Using OpenRouter smart model")
+            openrouter_model_type = "smart"
+        elif args.local:
+            openrouter_model_type = None
+            print("Using local LLM")
+        else:
+            raise ValueError("No model type provided")
+    
+
     if args.everything:
-        run_everything()
+        run_everything(openrouter_model_type=openrouter_model_type)
     elif args.tweets:
         get_tweets_function()
     elif args.rank:
-        rank_tweets_function()
+        rank_tweets_function(openrouter_model_type=openrouter_model_type)
     elif args.article:
-        write_article_function()
+        write_article_function(openrouter_model_type=openrouter_model_type)
     elif args.podcast:
         create_podcast_function()
     else:
         # If no arguments provided, run everything as default
-        run_everything()
+        run_everything(openrouter_model_type=openrouter_model_type)
 
     print_timing(total_start_time, "Total execution")
 

@@ -7,7 +7,7 @@ from pydantic_models.llm_article_model import LLMArticle
 import pandas as pd
 import os
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import jinja2
 import pathlib
@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import uuid
 from typing import Optional, Dict, Any
+import yaml
+from llm.open_router import create_openrouter_model, get_model_display_name, ModelType
 
 # Read the env var OLLAMA_HOST
 ollama_host = os.getenv("OLLAMA_HOST")
@@ -32,11 +34,14 @@ def collect_tweets_for_article(
 
     if rank_list is None or len(rank_list) == 0:
         # Pull in all ranks from the specific date with score >= 7
+        # Join on the tweets table to pull based on when the tweets were created 
+        # (and not when the rank was run)
         sql_query = f"""
-        SELECT * FROM ranks
-        WHERE date(run_time) = '{run_date}'
-        AND score >= 7
-        ORDER BY score DESC
+        SELECT * FROM rank
+        join tweet on rank.tweet_id = tweet.tweet_id
+        WHERE date(tweet.created_at) = '{run_date}'
+        AND rank.score >= 7
+        ORDER BY rank.score DESC
         LIMIT 10;
         """
 
@@ -52,7 +57,7 @@ def collect_tweets_for_article(
     # Query for the tweets using these IDs
     placeholders = ",".join(["?" for _ in tweet_ids])
     tweet_query = f"""
-    SELECT * FROM tweets 
+    SELECT * FROM tweet 
     WHERE tweet_id IN ({placeholders})
     ORDER BY created_at DESC;
     """
@@ -103,7 +108,7 @@ def format_tweet_sources(tweets_df: pd.DataFrame) -> str:
     return "\n\n".join(tweet_sources)
 
 
-def generate_article_plan(tweets_df: pd.DataFrame) -> ArticlePlan:
+def generate_article_plan(tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None) -> ArticlePlan:
     """Generate a structured plan for the article using the tweet data."""
     # Format tweet information
     sources = format_tweet_sources(tweets_df)
@@ -119,12 +124,17 @@ def generate_article_plan(tweets_df: pd.DataFrame) -> ArticlePlan:
     prompt = template.render(sources=sources)
 
     # Make LLM call for planning
-    ollama_model = OpenAIModel(
-        model_name=model_name,
-        provider=OpenAIProvider(base_url=full_url),
-    )
-
-    agent = Agent(model=ollama_model, output_type=ArticlePlan, prompt=prompt, retries=3)
+    if openrouter_model_type:
+        # Use OpenRouter with specified model type
+        openrouter_model = create_openrouter_model(openrouter_model_type)
+        agent = Agent(model=openrouter_model, output_type=ArticlePlan, system_prompt=prompt, retries=3)
+    else:
+        # Initialize the local Ollama model
+        ollama_model = OpenAIChatModel(
+            model_name=model_name,
+            provider=OpenAIProvider(base_url=full_url),
+        )
+        agent = Agent(model=ollama_model, output_type=ArticlePlan, system_prompt=prompt, retries=3)
 
     # Run the agent and get the plan
     plan = agent.run_sync(prompt).output
@@ -172,10 +182,10 @@ def save_article_to_markdown(article: Article) -> str:
     return str(filepath)
 
 
-def create_article(tweets_df: pd.DataFrame) -> Article:
+def create_article(tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None) -> Article:
     """Create an article using a two-step process: planning and generation."""
     # Step 1: Generate an article plan
-    plan = generate_article_plan(tweets_df)
+    plan = generate_article_plan(tweets_df, openrouter_model_type)
 
     # Step 2: Generate the full article using the plan
     sources = format_tweet_sources(tweets_df)
@@ -196,17 +206,20 @@ def create_article(tweets_df: pd.DataFrame) -> Article:
     )
 
     # Make LLM call for article generation
-    ollama_model = OpenAIModel(
-        model_name=model_name,
-        provider=OpenAIProvider(base_url=full_url),
-    )
-
-    agent = Agent(
-        model=ollama_model,
-        output_type=LLMArticle,
-        prompt=prompt,
-        retries=3,
-    )
+    if openrouter_model_type:
+        # Use OpenRouter with specified model type
+        openrouter_model = create_openrouter_model(openrouter_model_type)
+        agent = Agent(model=openrouter_model, output_type=LLMArticle, system_prompt=prompt, retries=3)
+        current_model = get_model_display_name(openrouter_model_type)
+    # Use the local Ollama model if no model type is provided
+    else:
+        # Initialize the local Ollama model
+        ollama_model = OpenAIChatModel(
+            model_name=model_name,
+            provider=OpenAIProvider(base_url=full_url),
+        )
+        agent = Agent(model=ollama_model, output_type=LLMArticle, system_prompt=prompt, retries=3)
+        current_model = model_name
 
     # Run the agent and get the result
     llm_article = agent.run_sync(prompt).output
@@ -215,7 +228,7 @@ def create_article(tweets_df: pd.DataFrame) -> Article:
     print(f"Article summary: {llm_article.summary}")
 
     # Create a full Article object from the LLMArticle and additional metadata
-    article = Article.from_llm_article(llm_article, model=model_name, prompt=prompt)
+    article = Article.from_llm_article(llm_article, model=current_model, prompt=prompt)
 
     # Save the article to a markdown file
     save_article_to_markdown(article)

@@ -1,1 +1,1 @@
-select * from tweets limit 2;
+select * from tweet limit 2;

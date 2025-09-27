@@ -1,0 +1,11 @@
+OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1"
+
+# FREE_MODEL: "x-ai/grok-4-fast:free" # Not great at v1 article generation
+# FREE_MODEL: "openai/gpt-oss-120b:free" # Does not work
+FREE_MODEL: "deepseek/deepseek-chat-v3.1:free"
+
+FAST_MODEL: "google/gemini-2.5-flash"
+FAST_MODEL_BACKUP: "openai/gpt-oss-120b:free"
+
+SMART_MODEL: "openai/gpt-5"
+SMART_MODEL_BACKUP: "google/gemini-2.5-pro"

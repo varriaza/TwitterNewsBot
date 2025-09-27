@@ -1,6 +1,6 @@
 import os
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import logfire
 from pydantic_models.tweet_model import Tweet
@@ -9,6 +9,9 @@ from pydantic_models.llm_rank_model import LLMRank
 import jinja2
 import pathlib
 from datetime import datetime, timedelta
+import yaml
+from llm.open_router import create_openrouter_model, get_model_display_name, ModelType
+from typing import Optional
 
 # # Send LLM logs to Logfire
 # logfire.configure()
@@ -57,7 +60,7 @@ def format_tweet_info(tweet: Tweet) -> str:
     return tweet_info
 
 
-def rank_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
+def rank_tweet(tweet: Tweet, openrouter_model_type: Optional[ModelType] = None) -> Rank:
     # Get formatted tweet information
     tweet_info = format_tweet_info(tweet)
 
@@ -74,24 +77,26 @@ def rank_tweet(tweet: Tweet, use_local_llm: bool = True) -> Rank:
     template = jinja_env.from_string(template_content)
     prompt = template.render(tweet=tweet_info, **date_info)
 
-    if use_local_llm:
-        # Initialize the model
-        ollama_model = OpenAIModel(
+    if openrouter_model_type:
+        # Use OpenRouter with specified model type
+        openrouter_model = create_openrouter_model(openrouter_model_type)
+        agent = Agent(model=openrouter_model, output_type=LLMRank, system_prompt=prompt, retries=3)
+        current_model = get_model_display_name(openrouter_model_type)
+    else:
+        # Initialize the local Ollama model
+        ollama_model = OpenAIChatModel(
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
         )
-        agent = Agent(model=ollama_model, output_type=LLMRank, prompt=prompt, retries=3)
-    else:
-        # TODO: Implement remote LLM
-        # Use the OpenAI API
-        raise NotImplementedError("Remote LLM not implemented yet")
+        agent = Agent(model=ollama_model, output_type=LLMRank, system_prompt=prompt, retries=3)
+        current_model = model_name
 
     # Get the LLM output as LLMRank
     llm_rank = agent.run_sync(prompt).output
 
     # Convert LLMRank to a full Rank with additional metadata
     rank = Rank.from_llm_rank(
-        llm_rank=llm_rank, tweet_id=tweet.tweet_id, model=model_name, prompt=prompt
+        llm_rank=llm_rank, tweet_id=tweet.tweet_id, model=current_model, prompt=prompt
     )
 
     return rank
