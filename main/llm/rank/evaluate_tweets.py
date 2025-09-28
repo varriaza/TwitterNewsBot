@@ -9,8 +9,8 @@ from pydantic_models.llm_rank_model import LLMRank
 import jinja2
 import pathlib
 from datetime import datetime, timedelta
-import yaml
 from llm.open_router import create_openrouter_model, get_model_display_name, ModelType
+from llm.call_llm import call_llm_with_retry
 from typing import Optional
 
 # # Send LLM logs to Logfire
@@ -19,9 +19,7 @@ from typing import Optional
 
 # Agent.instrument_all()
 
-# Read the env var OLLAMA_HOST
-ollama_host = os.getenv("OLLAMA_HOST")
-full_url = f"{ollama_host}/v1"
+# Read the env var OLLAMA_HOST (only when needed)
 model_name = "qwen3:14b"
 
 
@@ -60,7 +58,7 @@ def format_tweet_info(tweet: Tweet) -> str:
     return tweet_info
 
 
-def rank_tweet(tweet: Tweet, openrouter_model_type: Optional[ModelType] = None) -> Rank:
+def rank_tweet(tweet: Tweet, rank_model_type: Optional[ModelType] = None, ollama_host: Optional[str] = None) -> Rank:
     # Get formatted tweet information
     tweet_info = format_tweet_info(tweet)
 
@@ -77,15 +75,19 @@ def rank_tweet(tweet: Tweet, openrouter_model_type: Optional[ModelType] = None) 
     template = jinja_env.from_string(template_content)
     prompt = template.render(tweet=tweet_info, **date_info)
 
-    if openrouter_model_type:
+    if rank_model_type:
         # Use OpenRouter with specified model type
-        openrouter_model = create_openrouter_model(openrouter_model_type)
+        openrouter_model = create_openrouter_model(rank_model_type)
         agent = Agent(
             model=openrouter_model, output_type=LLMRank, system_prompt=prompt, retries=3
         )
-        current_model = get_model_display_name(openrouter_model_type)
+        current_model = get_model_display_name(rank_model_type)
     else:
         # Initialize the local Ollama model
+        if not ollama_host:
+            raise ValueError("ollama_host parameter is required to use local models. Please provide it (e.g., 'http://localhost:11434')")
+        
+        full_url = f"{ollama_host}/v1"
         ollama_model = OpenAIChatModel(
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
@@ -95,8 +97,9 @@ def rank_tweet(tweet: Tweet, openrouter_model_type: Optional[ModelType] = None) 
         )
         current_model = model_name
 
-    # Get the LLM output as LLMRank
-    llm_rank = agent.run_sync(prompt).output
+    # Get the LLM output as LLMRank with retry logic
+    result = call_llm_with_retry(agent.run_sync, prompt)
+    llm_rank = result.output
 
     # Convert LLMRank to a full Rank with additional metadata
     rank = Rank.from_llm_rank(

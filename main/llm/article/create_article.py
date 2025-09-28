@@ -14,10 +14,9 @@ import pathlib
 from datetime import datetime
 from typing import Optional
 from llm.open_router import create_openrouter_model, get_model_display_name, ModelType
+from llm.call_llm import call_llm_with_retry
 
-# Read the env var OLLAMA_HOST
-ollama_host = os.getenv("OLLAMA_HOST")
-full_url = f"{ollama_host}/v1"
+# Local model configuration (only used when needed)
 model_name = "qwen3:14b_t0"
 
 
@@ -34,7 +33,8 @@ def collect_tweets_for_article(
         # Join on the tweets table to pull based on when the tweets were created
         # (and not when the rank was run)
         sql_query = f"""
-        SELECT * FROM rank
+        SELECT rank.rank_id, rank.tweet_id, rank.run_time, rank.reason, rank.score, rank.model, rank.prompt
+        FROM rank
         join tweet on rank.tweet_id = tweet.tweet_id
         WHERE date(tweet.created_at) = '{run_date}'
         AND rank.score >= 7
@@ -152,7 +152,7 @@ def format_paragraph_sources(sources: list[dict]) -> str:
 
 
 def generate_article_plan(
-    tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None
+    tweets_df: pd.DataFrame, article_model_type: Optional[ModelType] = None, ollama_host: Optional[str] = None
 ) -> ArticlePlan:
     """Generate a structured plan for the article using the tweet data."""
     # Format tweet information
@@ -169,9 +169,9 @@ def generate_article_plan(
     prompt = template.render(sources=sources)
 
     # Make LLM call for planning
-    if openrouter_model_type:
+    if article_model_type:
         # Use OpenRouter with specified model type
-        openrouter_model = create_openrouter_model(openrouter_model_type)
+        openrouter_model = create_openrouter_model(article_model_type)
         agent = Agent(
             model=openrouter_model,
             output_type=ArticlePlan,
@@ -180,6 +180,10 @@ def generate_article_plan(
         )
     else:
         # Initialize the local Ollama model
+        if not ollama_host:
+            raise ValueError("ollama_host parameter is required to use local models. Please provide it (e.g., 'http://localhost:11434')")
+        
+        full_url = f"{ollama_host}/v1"
         ollama_model = OpenAIChatModel(
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
@@ -188,8 +192,9 @@ def generate_article_plan(
             model=ollama_model, output_type=ArticlePlan, system_prompt=prompt, retries=3
         )
 
-    # Run the agent and get the plan
-    plan = agent.run_sync(prompt).output
+    # Run the agent and get the plan with retry logic
+    result = call_llm_with_retry(agent.run_sync, prompt)
+    plan = result.output
     print(f"Generated article plan with daily summary: {plan.daily_summary}")
     # print(f"Article plan top stories: {plan.top_stories}")
     # print(f"Article plan structure: {plan.structure}")
@@ -331,11 +336,11 @@ def save_article_v2_to_markdown(
 
 
 def create_article(
-    tweets_df: pd.DataFrame, openrouter_model_type: Optional[ModelType] = None
+    tweets_df: pd.DataFrame, article_model_type: Optional[ModelType] = None, ollama_host: Optional[str] = None
 ) -> Article:
     """Create an article using a two-step process: planning and generation."""
     # Step 1: Generate an article plan
-    plan = generate_article_plan(tweets_df, openrouter_model_type)
+    plan = generate_article_plan(tweets_df, article_model_type, ollama_host)
 
     # Step 2: Generate the full article using the plan
     sources = format_tweet_sources(tweets_df)
@@ -356,19 +361,23 @@ def create_article(
     )
 
     # Make LLM call for article generation
-    if openrouter_model_type:
+    if article_model_type:
         # Use OpenRouter with specified model type
-        openrouter_model = create_openrouter_model(openrouter_model_type)
+        openrouter_model = create_openrouter_model(article_model_type)
         agent = Agent(
             model=openrouter_model,
             output_type=LLMArticleV2,
             system_prompt=prompt,
             retries=3,
         )
-        current_model = get_model_display_name(openrouter_model_type)
+        current_model = get_model_display_name(article_model_type)
     # Use the local Ollama model if no model type is provided
     else:
         # Initialize the local Ollama model
+        if not ollama_host:
+            raise ValueError("ollama_host parameter is required to use local models. Please provide it (e.g., 'http://localhost:11434')")
+        
+        full_url = f"{ollama_host}/v1"
         ollama_model = OpenAIChatModel(
             model_name=model_name,
             provider=OpenAIProvider(base_url=full_url),
@@ -381,8 +390,9 @@ def create_article(
         )
         current_model = model_name
 
-    # Run the agent and get the result
-    llm_article = agent.run_sync(prompt).output
+    # Run the agent and get the result with retry logic
+    result = call_llm_with_retry(agent.run_sync, prompt)
+    llm_article = result.output
 
     print(f"Generated article with title: {llm_article.title}")
     print(f"Article summary: {llm_article.summary}")

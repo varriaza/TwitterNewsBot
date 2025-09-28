@@ -1,6 +1,4 @@
 # Goal: Refine article creation by integrating LLM Router
-- Make the model cite the URLs for the tweets it uses 
-    - I should also verify that the tweet ids/links are valid and toss any that aren't
 - Refine ranking and article generation prompt for reasoning models
 - Try experimenting with gpt-5, gemini 2.5 flash, gemini 2.5 pro for ranking and article creation
     - Consider setting up promptfoo for testing/comparing

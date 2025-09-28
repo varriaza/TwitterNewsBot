@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 import time
 from llm.open_router import ModelType
 from typing import Optional
+import yaml
+import pathlib
 
 db_path = "main/db/news_data.db"
 
@@ -20,6 +22,13 @@ RUN_DAY = "2025-09-26"  # Format: YYYY-MM-DD
 # RUN_DAY = (datetime.strptime(RUN_DAY, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
 
 GET_TEST_DATA = True
+
+
+def load_config() -> dict:
+    """Load configuration from keys/key.yaml file."""
+    keys_path = pathlib.Path(__file__).parent.parent / "keys" / "key.yaml"
+    with open(keys_path, "r") as f:
+        return yaml.safe_load(f)
 
 
 def print_timing(start_time, operation_name):
@@ -78,7 +87,8 @@ def get_tweets_function() -> list[Tweet]:
 
 def rank_tweets_function(
     tweet_list: list[Tweet] | None = None,
-    openrouter_model_type: Optional[ModelType] = None,
+    rank_model_type: Optional[ModelType] = None,
+    ollama_host: Optional[str] = None,
 ):
     start_time = time.time()
     print("\nStarting tweet ranking...")
@@ -109,7 +119,7 @@ def rank_tweets_function(
         # tweet_list = tweet_list[:3]
 
         for tweet in tweet_list:
-            rank = rank_tweet(tweet, openrouter_model_type)
+            rank = rank_tweet(tweet, rank_model_type, ollama_host)
             # Save the rank to the database
             # NOTE: this can save duplicate ranks
             db.save_rank_object(rank)
@@ -137,7 +147,8 @@ def rank_tweets_function(
 
 def write_article_function(
     rank_list: list[Rank] | None = None,
-    openrouter_model_type: Optional[ModelType] = None,
+    article_model_type: Optional[ModelType] = None,
+    ollama_host: Optional[str] = None,
 ) -> Article:
     start_time = time.time()
     print("\nStarting article generation...")
@@ -146,7 +157,7 @@ def write_article_function(
     tweets_df = collect_tweets_for_article(rank_list, RUN_DAY)
 
     # Generate and get the article
-    article = create_article(tweets_df, openrouter_model_type)
+    article = create_article(tweets_df, article_model_type, ollama_host)
 
     # Save article to database
     db = initialize_database()
@@ -168,16 +179,16 @@ def create_podcast_function():
     print_timing(start_time, "Podcast creation")
 
 
-def run_everything(openrouter_model_type: Optional[ModelType] = None):
+def run_everything(rank_model_type: Optional[ModelType] = None, article_model_type: Optional[ModelType] = None, ollama_host: Optional[str] = None):
     total_start_time = time.time()
     print("\nStarting full pipeline execution...")
 
     tweet_list = get_tweets_function()
     rank_list = rank_tweets_function(
-        tweet_list, openrouter_model_type=openrouter_model_type
+        tweet_list, rank_model_type=rank_model_type, ollama_host=ollama_host
     )
-    write_article_function(rank_list, openrouter_model_type=openrouter_model_type)
-    create_podcast_function()
+    write_article_function(rank_list, article_model_type=article_model_type, ollama_host=ollama_host)
+    # create_podcast_function()
 
     print_timing(total_start_time, "Full pipeline")
 
@@ -194,50 +205,54 @@ def main():
     parser.add_argument("-a", "--article", action="store_true", help="Write article")
     parser.add_argument("-p", "--podcast", action="store_true", help="Create podcast")
     parser.add_argument(
-        "-fr", "--free", action="store_true", help="Use OpenRouter free model"
+        "-fr", "--free", action="store_true", help="Use free models for both ranking and article generation"
     )
     parser.add_argument(
-        "-fa", "--fast", action="store_true", help="Use OpenRouter fast model"
-    )
-    parser.add_argument(
-        "-sm", "--smart", action="store_true", help="Use OpenRouter smart model"
+        "-pa", "--paid", action="store_true", help="Use paid models (fast for ranking, smart for article generation)"
     )
     parser.add_argument("-lo", "--local", action="store_true", help="Use local LLM")
 
     args = parser.parse_args()
 
-    openrouter_model_type = None
+    # Load configuration
+    config = load_config()
+    ollama_host = config.get("ollama_host")
+
+    # Model type configuration
+    rank_model_type = None
+    article_model_type = None
+    
     # If we are running a step that requires an LLM, set the arguments
-    if args.rank or args.article or args.podcast:
+    if args.rank or args.article or args.podcast or args.everything:
         # Determine which model type to use
         if args.free:
-            openrouter_model_type = "free"
-            print("Using OpenRouter free model")
-        elif args.fast:
-            openrouter_model_type = "fast"
-            print("Using OpenRouter fast model")
-        elif args.smart:
-            print("Using OpenRouter smart model")
-            openrouter_model_type = "smart"
+            rank_model_type = "free"
+            article_model_type = "free"
+            print("Using OpenRouter free models for both ranking and article generation")
+        elif args.paid:
+            rank_model_type = "fast"
+            article_model_type = "smart"
+            print("Using OpenRouter paid models (fast for ranking, smart for article generation)")
         elif args.local:
-            openrouter_model_type = None
+            rank_model_type = None
+            article_model_type = None
             print("Using local LLM")
         else:
-            raise ValueError("No model type provided")
+            raise ValueError("No model type provided (use --free, --paid, or --local)")
 
     if args.everything:
-        run_everything(openrouter_model_type=openrouter_model_type)
+        run_everything(rank_model_type=rank_model_type, article_model_type=article_model_type, ollama_host=ollama_host)
     elif args.tweets:
         get_tweets_function()
     elif args.rank:
-        rank_tweets_function(openrouter_model_type=openrouter_model_type)
+        rank_tweets_function(rank_model_type=rank_model_type, ollama_host=ollama_host)
     elif args.article:
-        write_article_function(openrouter_model_type=openrouter_model_type)
+        write_article_function(article_model_type=article_model_type, ollama_host=ollama_host)
     elif args.podcast:
         create_podcast_function()
     else:
         # If no arguments provided, run everything as default
-        run_everything(openrouter_model_type=openrouter_model_type)
+        run_everything(rank_model_type=rank_model_type, article_model_type=article_model_type, ollama_host=ollama_host)
 
     print_timing(total_start_time, "Total execution")
 
