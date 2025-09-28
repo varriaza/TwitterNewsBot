@@ -3,7 +3,7 @@ from typing import Dict, Any
 from uuid import uuid4
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import JSON
-from pydantic_models.llm_article_model import LLMArticle
+from pydantic_models.llm_article_model import LLMArticle, LLMArticleV2
 
 
 class Article(SQLModel, table=True):
@@ -46,6 +46,45 @@ class Article(SQLModel, table=True):
         return cls(
             title=llm_article.title,
             content=llm_article.content,
+            summary=llm_article.summary,
+            daily_summary=llm_article.daily_summary,
+            top_stories=llm_article.top_stories,
+            model=model,
+            prompt=prompt,
+        )
+
+    @classmethod
+    def from_llm_article_v2(
+        cls, llm_article: LLMArticleV2, model: str = None, prompt: str = None
+    ) -> "Article":
+        """Create a full Article object from an LLMArticleV2 object and additional metadata"""
+        # Import here to avoid circular imports
+        from llm.article.create_article import (
+            get_tweet_sources_by_ids,
+            format_paragraph_sources,
+        )
+
+        # Convert the paragraph-based content to a single string with sources
+        content_paragraphs = []
+        for paragraph_data in llm_article.content:
+            paragraph_text = paragraph_data.get("paragraph_text", "")
+            relevant_tweet_ids = paragraph_data.get("relevant_tweet_ids_list", [])
+
+            # Add the paragraph text
+            content_paragraphs.append(paragraph_text)
+
+            # Add sources if there are relevant tweet IDs
+            if relevant_tweet_ids:
+                sources = get_tweet_sources_by_ids(relevant_tweet_ids)
+                if sources:
+                    sources_text = format_paragraph_sources(sources)
+                    content_paragraphs.append(sources_text)
+
+        content = "\n\n".join(content_paragraphs)
+
+        return cls(
+            title=llm_article.title,
+            content=content,
             summary=llm_article.summary,
             daily_summary=llm_article.daily_summary,
             top_stories=llm_article.top_stories,

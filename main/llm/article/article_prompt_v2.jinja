@@ -10,14 +10,34 @@ The comprehensive daily news article should be informative, objective, and engag
 
 
 # Output Requirements
-Respond with a JSON object containing:
+IMPORTANT: Respond ONLY with a valid JSON object. Do not include any explanatory text, comments, or additional content before or after the JSON.
+
+The JSON object must contain exactly these fields:
 - content: A list of JSON dictionaries. Each of these dictionaries has the following key/value pairs. 
     1. key:"paragraph_text", value: The string text of a paragraph of the article.
-    2. key:"relevant_tweet_ids_list", value: a list of the sting UUID tweet ids relevant to the paragraph you just created. All relevant tweet ids that the paragraph references or uses information from must be included here to maintain your high journalistic standards.
+    2. key:"relevant_tweet_ids_list", value: a list of the string UUID tweet ids relevant to the paragraph you just created. All relevant tweet ids that the paragraph references or uses information from must be included here to maintain your high journalistic standards.
 - summary: A brief summary of the entire day's news (2-3 sentences)
 - daily_summary: The overview of the day's most significant developments
 - title: A catchy, clear and informative headline that reflects the day's most important developments
 - top_stories: A list of the key stories covered in the summary
+
+Example format:
+{
+  "content": [
+    {
+      "paragraph_text": "Paragraph 1 text here...",
+      "relevant_tweet_ids_list": ["tweet_id_1", "tweet_id_2"]
+    },
+    {
+      "paragraph_text": "Paragraph 2 text here...",
+      "relevant_tweet_ids_list": ["tweet_id_1", "tweet_id_3"]
+    }
+  ],
+  "summary": "Brief summary here...",
+  "daily_summary": "Daily summary here...",
+  "title": "Article title here...",
+  "top_stories": ["Story 1", "Story 2"]
+}
 
 # Daily Summary
 {{ daily_summary }}
